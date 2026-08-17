@@ -183,6 +183,55 @@ sich dadurch weniger stark aus.
 Breeze und Nacht bleiben vollständig unterstützt, dürfen bei der
 Plausibilitätsdiagnose aber konservativer behandelt werden.
 
+
+## Webinterface – Screenshots
+
+Die Weboberfläche ist für Smartphone und Desktop ausgelegt. Die folgenden
+Screenshots stammen direkt aus dem HTML-Interface der Version **v6.4.10**.
+Die angezeigten IP-, WLAN- und Diagnosewerte sind Beispieldaten.
+
+### Steuerung
+
+Auf der Hauptseite bleiben nur die Funktionen, die im Alltag benötigt werden:
+Speed, Modus, Drehen, Sleep-Timer und der bewusste LED-Statusabgleich.
+
+<p align="center">
+  <img src="docs/images/web-ui-steuerung-v6.4.10.png" alt="Ventilator Webinterface – Steuerung" width="420">
+</p>
+
+### Manueller Web-Status
+
+Falls der HO-5500RE direkt am Gerät oder über die originale Fernbedienung
+bedient wurde, kann der interne ESP-/Webzustand ohne weiteren physischen
+Tastendruck korrigiert werden.
+
+Dabei lassen sich **Aus / Stufe 1–3**, **Normal / Breeze / Nacht** und
+**Drehen AUS/AN** setzen.
+
+<p align="center">
+  <img src="docs/images/web-ui-manueller-status-v6.4.10.png" alt="Ventilator Webinterface – manueller Status" width="420">
+</p>
+
+### Einstellungen
+
+ESP32-Informationen und OTA wurden bewusst aus der täglichen Steuerungsansicht
+entfernt und unter **Einstellungen** zusammengefasst.
+
+<p align="center">
+  <img src="docs/images/web-ui-einstellungen-v6.4.10.png" alt="Ventilator Webinterface – ESP32 und OTA" width="420">
+</p>
+
+### Kalibrierung & Daten
+
+Trennschärfe-Analyse, Speed-/Modus-Kalibrierung sowie Backup und
+Wiederherstellung befinden sich gemeinsam im Bereich **Kalibrierung & Daten**.
+Die ausführlichen Diagnosewerte und manuellen Lern-Buttons bleiben vollständig
+verfügbar.
+
+<p align="center">
+  <img src="docs/images/web-ui-kalibrierung-v6.4.10.png" alt="Ventilator Webinterface – Kalibrierung und Daten" width="420">
+</p>
+
 ## Weboberfläche
 
 ### Steuerung
