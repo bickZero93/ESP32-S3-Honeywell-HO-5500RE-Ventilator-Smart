@@ -1,40 +1,86 @@
 # ESP32-S3 Honeywell HO-5500RE Ventilator Smart
 
-Ein Umbau des **Honeywell HO-5500RE Turmventilators** mit einem **ESP32-S3-Zero**, um die vorhandene Tastensteuerung per WLAN zu bedienen, den Gerätezustand über die vorhandenen LEDs zurückzulesen und zusätzliche Funktionen wie einen eigenen Sleep-Timer, OTA-Updates und eine Weboberfläche bereitzustellen.
+Smart-Home-Umbau des **Honeywell HO-5500RE Turmventilators** mit einem
+**ESP32-S3-Zero**. Die originale Honeywell-Steuerplatine bleibt vollständig
+erhalten: Der ESP32 simuliert die vorhandenen Taster über MOSFETs, liest die
+Status-LEDs als analoges Feedback und stellt Websteuerung, Sleep-Timer,
+Kalibrierung, Backup sowie OTA-Updates bereit.
 
-Das Ziel des Projekts war ausdrücklich **nicht**, die originale Steuerplatine zu ersetzen. Stattdessen bleibt die Honeywell-Elektronik vollständig erhalten: Der ESP32 betätigt die vorhandenen Taster elektronisch und liest die vorhandenen Status-LEDs als Feedback ein.
-
-> **Projektstatus:** Final / funktionsfähig  
-> **Firmware:** `5.0.0-FINAL`  
-> **Controller:** ESP32-S3-Zero
+> **Projektstatus:** Final / im realen Gerät eingesetzt  
+> **Aktuelle Firmware:** `6.4.10-FINAL-UI-MANUAL-OSC`  
+> **Controller:** ESP32-S3-Zero  
+> **Upgrade von GitHub-Stand 5.0.0:** kein kompletter Hardwareumbau erforderlich
 
 ![Fertiger Einbau](docs/images/final-esp32-installation.jpg)
 
+## Was sich seit 5.0.0 geändert hat
+
+Die ursprüngliche GitHub-Version arbeitete mit **9 Profilen**
+(`3 Geschwindigkeiten × 3 Modi`). Die aktuelle Firmware bildet zusätzlich
+**Drehen AUS/AN** ab und arbeitet damit mit **18 vollständigen Zuständen**.
+
+Die LED-Auswertung wurde grundlegend überarbeitet:
+
+- phasenentkoppelte/jitternde ADC-Abtastung statt eines festen Zeitrasters
+- 64-Bin-Histogramme pro LED-Kanal
+- 10 CDF-Stützstellen × 5 Kanäle = **50 Verteilungsmerkmale**
+- transition-balanced Training mit unterschiedlichen Vorgängerzuständen
+- unabhängiger Holdout statt nur Trainingserfolg
+- getrennte kontextuelle Erkennung für Speed, Modus und Drehen
+- zusätzliches **OSC-LINEAR-Modell** für den Schwenkbetrieb
+- robustere Normal-Modus-Erkennung über relative Kanalformen
+- Kalibrierungs-/Analyseexport für Offline-Auswertung
+- persistente FINAL-Profile mit CRC/A-B-Speicherung
+- wiederaufnehmbare Analyse-Checkpoints
+- komplett neu strukturierte Weboberfläche
+
+Details stehen in [docs/MEASUREMENT.md](docs/MEASUREMENT.md).
+
 ## Features
 
-- WLAN-Weboberfläche für **Ein/Aus**, **Speed 1–3**, **Drehen**, **Normal**, **Breeze** und **Night**
-- Elektronische Tastenbetätigung über **2N7000 N-Kanal-MOSFETs**
-- LED-Feedback über fünf ADC-Eingänge des ESP32-S3
-- Robuste Zustandsmessung mit synchronisierten Mehrkanal-Samples
-- Erkennung von **Aus**, **Speed 1/2/3** und den Moduskombinationen
-- Kalibrierung und automatische Trennschärfeanalyse
-- 9 Kombinationsprofile: `3 Geschwindigkeiten × 3 Modi`
-- Persistente Kalibrierdaten im NVS/`Preferences`
+- WLAN-Weboberfläche für **Ein/Aus**, **Speed 1–3**, **Drehen**,
+  **Normal**, **Breeze** und **Nacht**
+- elektronische Tastenbetätigung über **2N7000 N-Kanal-MOSFETs**
+- fünf ADC1-Kanäle für das LED-Feedback
+- **18 Zustandsprofile**:
+  `3 Geschwindigkeiten × 3 Modi × Drehen AUS/AN`
+- Rich-CDF-Klassifikation mit 50 Verteilungsmerkmalen
+- zusätzliches OSC-LINEAR-Modell für Drehen
+- Normal-Modus als primärer Praxisfall besonders robust behandelt
+- Trennschärfe-Analyse mit Training, Holdout und optionalem AI-Export
+- kompakter JSON-Export und optionaler Export der 64-Bin-Rohhistogramme
+- persistente Kalibrierung in NVS/`Preferences`
 - Backup/Import der Kalibrierung über die Weboberfläche
-- Manueller Button **„Status jetzt aus LEDs übernehmen“**
-- Einmaliger LED-Startabgleich nach dem Einschalten
-- Eigener Sleep-Timer bis 4 Stunden
-- OTA-Firmwareupdates direkt im Browser
-- Fallback-Access-Point bei nicht erreichbarem WLAN
-- Schnelle „optimistische“ Weboberfläche: Tastendrücke werden sofort optisch dargestellt
+- Button **„Status über LEDs abgleichen“**
+- **manuelle Web-Statuskorrektur**, falls der Ventilator direkt am Gerät
+  oder mit der originalen Fernbedienung bedient wurde:
+  - Aus / Stufe 1 / Stufe 2 / Stufe 3
+  - Normal / Breeze / Nacht
+  - Drehen AUS / AN
+- eigener Sleep-Timer bis 4 Stunden
+- Browser-OTA
+- Fallback-Access-Point bei WLAN-Problemen
+- optimistische Weboberfläche
+- getrennte Bereiche **Steuerung** und **Einstellungen**
+- ESP32/OTA sowie Kalibrierung/Backup aufgeräumt in den Einstellungen
 
-## Projektbeschreibung
+## Grundprinzip
 
-Der HO-5500RE besitzt eine eigene Steuerplatine mit fünf Tastern und mehreren Status-LEDs. Der ESP32 wird parallel an die Taster angebunden. Ein GPIO steuert jeweils das Gate eines 2N7000; der MOSFET simuliert den originalen Tastendruck, ohne die vorhandene Bedienung zu entfernen.
+Der ESP32 ersetzt die originale Steuerung **nicht**. Er wird parallel an die
+Taster angeschlossen und simuliert einen Tastendruck über einen 2N7000.
+Die originale Bedienung am Gerät bleibt damit erhalten.
 
-Die Statusrückmeldung war der aufwendigste Teil des Projekts. Die LEDs werden nicht wie fünf voneinander unabhängige statische Signale angesteuert, sondern zeigen ein deutlich gemultiplextes bzw. gemeinsam driftendes Signal. Einzelne `analogRead()`-Werte waren deshalb nicht zuverlässig genug. Die finale Firmware misst alle relevanten Kanäle zeitlich verschachtelt, verwirft nach ADC-Kanalwechsel die erste Probe, nutzt mehrere Messfenster und arbeitet mit gelernten Kombinationsprofilen.
+### Tasterlogik
 
-Die Messanalyse zeigte außerdem, dass **Breeze und Night stark von der aktuellen Geschwindigkeitsstufe abhängen**. Deshalb werden in der finalen Erkennung nicht einfach ein Breeze- und ein Night-Profil über alle Stufen gemittelt, sondern neun Zustände getrennt behandelt.
+| Taste | Funktion |
+|---|---|
+| Power | Ein / Aus |
+| Speed | `1 → 2 → 3 → 1` |
+| Drehen | Toggle AUS/AN |
+| Mode | `Normal → Breeze → Nacht → Normal` |
+| Original-Timer | wird nicht benutzt |
+
+Der Sleep-Timer läuft vollständig im ESP32.
 
 ## Hardware
 
@@ -42,15 +88,15 @@ Benötigt werden im Kern:
 
 - Honeywell HO-5500RE
 - ESP32-S3-Zero
-- 4 × 2N7000 N-Kanal-MOSFET für Power, Speed, Oscillation und Mode
-- Leitungen / Dupont-Kabel bzw. feste Verdrahtung
-- gemeinsamer GND zwischen ESP32 und Steuerplatine
-- 5-V-Versorgung von der Ventilatorplatine für den ESP32
-- empfohlen: Gate-Pulldown am GPIO3 / Mode, da GPIO3 ein Strapping-Pin ist
+- 4 × 2N7000 für Power, Speed, Drehen und Mode
+- gemeinsame Masse zwischen ESP32 und Honeywell-Steuerplatine
+- 5-V-Versorgung für den ESP32
+- Leitungen für fünf LED-Anoden
+- empfohlen: Gate-Pulldown am GPIO3 / Mode
 
 ### GPIO-Belegung
 
-| Funktion | ESP32-S3 GPIO | Anschluss |
+| Funktion | GPIO | Anschluss |
 |---|---:|---|
 | Power / Taste 1 | GPIO6 | 2N7000 Gate |
 | Speed / Taste 2 | GPIO5 | 2N7000 Gate |
@@ -60,171 +106,266 @@ Benötigt werden im Kern:
 | LED Speed 2 | GPIO8 | LED-Anode / ADC1 |
 | LED Speed 3 | GPIO9 | LED-Anode / ADC1 |
 | LED Breeze | GPIO10 | LED-Anode / ADC1 |
-| LED Night | GPIO1 | LED-Anode / ADC1 |
+| LED Nacht | GPIO1 | LED-Anode / ADC1 |
 
-**Taste 4 / Original-Timer wird nicht benutzt.** Der Timer wird vollständig durch die ESP32-Weboberfläche ersetzt.
+Alle Feedback-Pins liegen bewusst auf **ADC1**.
 
-> Alle LED-Feedback-Pins liegen bewusst auf **ADC1 (GPIO1–GPIO10)**. ADC2 wurde vermieden, weil WLAN und ADC2 auf dem ESP32-S3 miteinander kollidieren können.
+Die genaue Verdrahtung steht in [docs/WIRING.md](docs/WIRING.md).
 
-## Bedienlogik des Ventilators
+## Warum die LED-Rückmeldung so aufwendig ist
 
-Die originale Logik bleibt erhalten:
+Die LEDs des HO-5500RE sind keine fünf einfachen digitalen HIGH/LOW-Signale.
+Die originale Platine **multiplext** die Anzeigen. Dadurch sieht der ESP32 an
+den Anoden eine zeitabhängige analoge Signalverteilung.
 
-| Taste | Funktion |
-|---|---|
-| Power | Ein / Aus |
-| Speed | `1 → 2 → 3 → 1` |
-| Drehen | Toggle Ein/Aus |
-| Mode | `Normal → Breeze → Night → Normal` |
+Eine feste ADC-Abtastung kann sich zufällig mit diesem Multiplexing
+synchronisieren. Innerhalb eines Messlaufs sehen die Werte dann extrem stabil
+aus, nach einem Neustart kann sich die Phase aber verschieben und dieselbe
+Messmethode liefert andere Werte. Genau dieses Aliasing war bei älteren
+Firmwaregenerationen ein zentrales Problem.
 
-Im ausgeschalteten Zustand sind Speed 1–3 in der Weboberfläche gesperrt. Der Ventilator muss zuerst eingeschaltet werden, weil die Hardware direkt aus „Aus“ keine gezielte Speed-2- oder Speed-3-Auswahl unterstützt.
+Zusätzlich liegen einige Kombinationen aus Breeze/Nacht und Drehen AUS/AN
+elektrisch sehr nahe beieinander. Auch Übergangspfad, Temperatur,
+Versorgungsspannung und ADC-Streuung können die Verteilung leicht verschieben.
 
-## Verhalten nach Stromausfall
+Die aktuelle Firmware versucht deshalb **nicht**, aus einem einzelnen ADC-Wert
+einen Zustand abzuleiten. Sie betrachtet Verteilungen über viele Messpunkte,
+relative Kanalformen und den bereits bekannten Web-Kontext.
 
-Der Ventilator selbst verliert bei einer vollständigen Netztrennung seinen Bedienzustand. Deshalb nimmt die Firmware nach einem echten Power-Cycle folgende Hardware-Defaults an:
+Mehr technische Details:
+[docs/MEASUREMENT.md](docs/MEASUREMENT.md).
 
-- Ventilator: **Aus**
-- beim nächsten Einschalten: **Speed 1**
-- Modus: **Normal**
-- Drehen: **Aus**
+## Zustandsmodell
 
-Die **LED-Kalibrierungen bleiben im ESP32 erhalten**. Ein OTA-/Software-Neustart wird dagegen anders behandelt, weil dabei die Ventilatorplatine selbst nicht stromlos wird.
-
-## LED-Messung und Kalibrierung
-
-Die finale Messung basiert auf fünf Kanälen:
-
-`LED1`, `LED2`, `LED3`, `LED8`, `LED9`
-
-Die synchronisierte Live-Messung ergab zuletzt sehr stabile Profile. Der Aus-Zustand lag etwa bei 48–50 %, während alle aktiven Zustände deutlich darüber lagen. Speed 1/2/3 waren mit großem Abstand trennbar; Breeze und Night sind dagegen das schwierigste Paar.
-
-Die Analyse hat folgende Schwellwerte als guten Ausgangspunkt gefunden:
+Die 18 vollständigen Zustände sind:
 
 ```text
-LED1: 2368
-LED2: 3072
-LED3: 2432
-LED8: 3200
-LED9: 2752
+Stufe 1 / Normal / Drehen AUS
+Stufe 1 / Normal / Drehen AN
+Stufe 1 / Breeze / Drehen AUS
+Stufe 1 / Breeze / Drehen AN
+Stufe 1 / Nacht / Drehen AUS
+Stufe 1 / Nacht / Drehen AN
+
+Stufe 2 / ... identisch
+
+Stufe 3 / ... identisch
 ```
 
-Gemessene Kanalgewichte:
+### Wichtige Designentscheidung
 
-```text
-LED1 1.10
-LED2 0.75
-LED3 1.26
-LED8 0.76
-LED9 1.12
-```
+**Der Webzustand bleibt autoritativ.**
 
-Der optimale **Formanteil lag bei 1.00**. Das bedeutet: Für die feine Kombinationsklassifikation ist die relative Verteilung der fünf Kanäle aussagekräftiger als der absolute gemeinsame Pegel. Gleichartige Pegeldrift fällt dadurch weitgehend heraus.
+Die LED-Erkennung dient als Plausibilitätskontrolle und zur bewussten
+Synchronisierung. Sie überschreibt einen absichtlich über die Weboberfläche
+gewählten Zustand nicht automatisch.
 
-### Warum 9 Kombinationsprofile?
+Wenn der Ventilator außerhalb der Weboberfläche bedient wurde, gibt es zwei
+Möglichkeiten:
 
-Die Messung zeigte deutlich, dass ein Breeze- oder Night-Muster nicht über alle Geschwindigkeiten konstant bleibt. Deshalb speichert die Firmware getrennte Profile für:
+1. **Status über LEDs abgleichen** – versucht den physischen Zustand aus den
+   LEDs zu rekonstruieren.
+2. **Web-Status manuell setzen** – setzt den internen Zustand direkt, ohne einen
+   Taster am Ventilator auszulösen.
 
-```text
-Speed 1 / Normal
-Speed 1 / Breeze
-Speed 1 / Night
-Speed 2 / Normal
-Speed 2 / Breeze
-Speed 2 / Night
-Speed 3 / Normal
-Speed 3 / Breeze
-Speed 3 / Night
-```
+Gerade die zweite Variante ist absichtlich vorhanden, weil nicht jede
+LED-Kombination unter allen Bedingungen mathematisch perfekt trennbar ist.
 
-Diese neun Profile sind die primäre Zustandsklassifikation. Die einfacheren Speed-/Mode-Profile bleiben als Fallback erhalten.
+## Normal-Modus
+
+Der Ventilator wird im realen Einsatz überwiegend in **Normal** verwendet.
+Deshalb wird dieser Modus bei der Laufzeiterkennung besonders robust behandelt.
+
+Für Speed wird im Normal-Modus stärker die relative Form der fünf LED-Kanäle
+verwendet. Gemeinsame Pegelverschiebungen zwischen zwei Boot-Sessions wirken
+sich dadurch weniger stark aus.
+
+Breeze und Nacht bleiben vollständig unterstützt, dürfen bei der
+Plausibilitätsdiagnose aber konservativer behandelt werden.
+
+
+## Webinterface – Screenshots
+
+Die Weboberfläche ist für Smartphone und Desktop ausgelegt. Die folgenden
+Screenshots stammen direkt aus dem HTML-Interface der Version **v6.4.10**.
+Die angezeigten IP-, WLAN- und Diagnosewerte sind Beispieldaten.
+
+### Steuerung
+
+Auf der Hauptseite bleiben nur die Funktionen, die im Alltag benötigt werden:
+Speed, Modus, Drehen, Sleep-Timer und der bewusste LED-Statusabgleich.
+
+<p align="center">
+  <img src="docs/images/web-ui-steuerung-v6.4.10.png" alt="Ventilator Webinterface – Steuerung" width="420">
+</p>
+
+### Manueller Web-Status
+
+Falls der HO-5500RE direkt am Gerät oder über die originale Fernbedienung
+bedient wurde, kann der interne ESP-/Webzustand ohne weiteren physischen
+Tastendruck korrigiert werden.
+
+Dabei lassen sich **Aus / Stufe 1–3**, **Normal / Breeze / Nacht** und
+**Drehen AUS/AN** setzen.
+
+<p align="center">
+  <img src="docs/images/web-ui-manueller-status-v6.4.10.png" alt="Ventilator Webinterface – manueller Status" width="420">
+</p>
+
+### Einstellungen
+
+ESP32-Informationen und OTA wurden bewusst aus der täglichen Steuerungsansicht
+entfernt und unter **Einstellungen** zusammengefasst.
+
+<p align="center">
+  <img src="docs/images/web-ui-einstellungen-v6.4.10.png" alt="Ventilator Webinterface – ESP32 und OTA" width="420">
+</p>
+
+### Kalibrierung & Daten
+
+Trennschärfe-Analyse, Speed-/Modus-Kalibrierung sowie Backup und
+Wiederherstellung befinden sich gemeinsam im Bereich **Kalibrierung & Daten**.
+Die ausführlichen Diagnosewerte und manuellen Lern-Buttons bleiben vollständig
+verfügbar.
+
+<p align="center">
+  <img src="docs/images/web-ui-kalibrierung-v6.4.10.png" alt="Ventilator Webinterface – Kalibrierung und Daten" width="420">
+</p>
 
 ## Weboberfläche
 
-Die Weboberfläche bietet:
+### Steuerung
 
-- Power
-- Speed 1–3
+Die Hauptseite enthält nur Funktionen für den täglichen Betrieb:
+
+- Speed 0–3
+- Normal / Breeze / Nacht
 - Drehen
-- Normal / Breeze / Night
 - Sleep-Timer
-- Kalibrierung und Analyse
-- getrenntes Löschen von Speed- und Modus-Kalibrierungen
-- Export / Import der gespeicherten Messprofile
-- manuellen LED-Statusabgleich
-- Netzwerkstatus / Uptime / Firmware-Version
-- Browser-OTA
+- **Status über LEDs abgleichen**
+- zugeklapptes Panel **Web-Status manuell setzen**
 
-Tastendrücke werden **optimistisch** dargestellt: Die Oberfläche aktualisiert den ausgewählten Zustand sofort und bestätigt ihn anschließend mit dem ESP32. Dadurch fühlt sich die Bedienung deutlich direkter an.
+### Einstellungen
+
+Technische Funktionen liegen getrennt unter **Einstellungen**:
+
+**ESP32 & OTA**
+
+- Firmwareversion
+- IP / WLAN
+- Uptime
+- gespeicherter Zustand
+- Kalibrierungsstatus
+- OTA-Upload
+
+**Kalibrierung & Daten**
+
+- Trennschärfe-Analyse
+- vollständige Speed-/Modus-Kalibrierung
+- Live-LED-Diagnose
+- Profil-/Fallback-Status
+- Backup & Wiederherstellung
+
+## Trennschärfe-Analyse
+
+Die Analyse ist heute vor allem ein Werkzeug für neue Hardware,
+Neuverdrahtung oder eine komplett neue Kalibrierung.
+
+Der aktuelle Ablauf verwendet:
+
+- 4 vollständige Trainingsdurchläufe
+- 18 Zustände pro Durchlauf
+- unterschiedliche Übergangspfade
+- 2 vollständige unabhängige Holdout-Pässe
+- eine dritte Messung nur für einzelne Grenzfälle
+
+Ein vollständig abgeschlossener Lauf kann anschließend gespeichert werden,
+auch wenn einzelne Diagnosewerte nicht perfekt sind. Die Qualitätsmetriken
+bleiben für Export und Diagnose erhalten.
 
 ## Installation
 
-1. Arduino IDE mit aktuellem ESP32-Core installieren.
-2. Board passend zum ESP32-S3-Zero auswählen.
-3. Datei aus [`firmware/`](firmware/) öffnen.
-4. Im Kopf der `.ino` die eigenen WLAN- und OTA-Zugangsdaten eintragen:
+1. Arduino IDE und ESP32-Arduino-Core installieren.
+2. ESP32-S3-Zero als passendes S3-Board konfigurieren.
+3. Aktuelle Datei aus [`firmware/`](firmware/) öffnen.
+4. Im Kopf der `.ino` die Platzhalter ersetzen:
 
 ```cpp
 const char* WIFI_SSID = "YOUR_WIFI_SSID";
 const char* WIFI_PASS = "YOUR_WIFI_PASSWORD";
+
 const char* AP_PASS   = "CHANGE_ME_AP";
 const char* OTA_USER  = "admin";
 const char* OTA_PASS  = "CHANGE_ME_OTA";
 ```
 
-5. Firmware zunächst per USB flashen.
-6. Danach kann über die Weboberfläche per OTA aktualisiert werden.
-7. Kalibrierung durchführen bzw. vorhandenes Backup importieren.
+5. Erstes Update per USB flashen.
+6. Danach sind OTA-Updates über die Weboberfläche möglich.
 
-## Sicherheitshinweis
+### Upgrade einer vorhandenen Installation
 
-Dieses Projekt greift in ein netzbetriebenes Haushaltsgerät ein. Arbeiten nur im **spannungsfreien Zustand** durchführen. Netzspannungsbereiche der Ventilatorplatine dürfen nicht mit dem ESP32 oder offenen Leitungen in Kontakt kommen.
+Beim normalen Update von einer bestehenden FINAL-Kalibrierung:
 
-Der ESP32 wird im Projekt aus den 5 V der Ventilatorplatine versorgt. **USB und Ventilatorversorgung sollten nicht gleichzeitig angeschlossen werden**, wenn keine saubere Entkopplung der beiden 5-V-Quellen vorhanden ist.
+- **Erase All Flash nicht aktivieren**
+- vorhandene Kalibrierungsdaten bleiben gespeichert
+- kein neuer kompletter Messlauf notwendig
 
-OTA- und Fallback-AP-Passwörter vor einem öffentlichen Einsatz unbedingt ändern.
+Gerätespezifische Kalibrierungsbackups werden bewusst **nicht** in diesem
+Repository veröffentlicht.
 
-## Bilder
+## Verhalten nach Neustart / Stromausfall
 
-### LED-Feedback direkt an der Steuerplatine
+Nach einer vollständigen Netztrennung verliert die Honeywell-Platine ihren
+Zustand. Die Firmware geht deshalb von folgenden Hardware-Defaults aus:
 
-![LED-Feedback](docs/images/pcb-led-feedback.jpg)
+- Ventilator AUS
+- nächstes Einschalten: Stufe 1
+- Normal
+- Drehen AUS
 
-### Prototypischer Aufbau während der Entwicklung
+Ein normaler ESP-/OTA-Neustart ist davon zu unterscheiden, weil die
+Honeywell-Platine dabei weiter versorgt sein kann. Der zuletzt bekannte
+Webzustand wird für diesen Fall erhalten.
 
-![Prototype Wiring](docs/images/prototype-wiring.jpg)
+## Sicherheit
 
-### Verdrahtung im Gehäuse
+Dieses Projekt verändert ein **netzbetriebenes Haushaltsgerät**.
 
-![Internal Installation](docs/images/internal-installation.jpg)
-
-### Finaler ESP32-S3-Zero Einbau
-
-![Final Installation](docs/images/final-esp32-installation.jpg)
+- Nur spannungsfrei am Gerät arbeiten.
+- Netzspannungsbereiche der Platine nicht berühren.
+- ESP32 und Niederspannungsleitungen sicher vom Netzbereich trennen.
+- ESP32-S3-GPIOs sind **nicht 5-V-tolerant**. LED-Messpunkte vor Anschluss
+  elektrisch prüfen.
+- USB-5-V und die 5-V-Schiene des Ventilators nicht unkontrolliert
+  gegeneinander speisen.
+- OTA- und Fallback-AP-Passwörter unbedingt ändern.
 
 ## Repository-Struktur
 
 ```text
 ESP32-S3-Honeywell-HO-5500RE-Smart/
 ├── README.md
-├── DESCRIPTION.txt
 ├── CHANGELOG.md
+├── DESCRIPTION.txt
+├── GITHUB.md
+├── RELEASE_v6.4.10.md
+├── PUSH_COMMANDS.md
 ├── .gitignore
 ├── firmware/
-│   └── ventilator_esp32_s3_zero_FINAL_v5.0.0.ino
+│   └── ventilator_esp32_s3_zero_FINAL_v6.4.10_UI_MANUAL_OSC.ino
 └── docs/
     ├── WIRING.md
     ├── MEASUREMENT.md
     └── images/
-        ├── pcb-led-feedback.jpg
-        ├── prototype-wiring.jpg
-        ├── internal-installation.jpg
-        └── final-esp32-installation.jpg
 ```
 
-## Hinweis zur Veröffentlichung
+## Changelog
 
-Die Firmware in diesem Repository enthält **keine privaten WLAN- oder OTA-Passwörter**. Zugangsdaten müssen vor dem Flashen selbst gesetzt werden.
+Siehe [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
-Ein Bastelprojekt, das mit „ich will nur einen Taster per ESP32 drücken“ angefangen hat und am Ende bei synchronisierter ADC-Messung, Multiplex-Profilen, automatischer Trennschärfeanalyse und neun Zustandsprofilen gelandet ist. 😄
+Das Projekt begann mit dem einfachen Ziel, die originalen Taster eines
+Turmventilators per ESP32 zu drücken. Der schwierigste Teil wurde am Ende nicht
+die Steuerung, sondern das zuverlässige Reverse Engineering der gemultiplexten
+LED-Rückmeldung.
