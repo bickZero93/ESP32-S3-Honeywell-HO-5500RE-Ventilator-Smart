@@ -1,1 +1,0 @@
-ESP32-S3 Smart-Home-Umbau für den Honeywell HO-5500RE Turmventilator: Websteuerung, 18 LED-Zustandsprofile, Rich-CDF/OSC-LINEAR-Erkennung, manueller Statusabgleich, Sleep-Timer, Kalibrierungsbackup und OTA.
